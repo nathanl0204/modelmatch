@@ -145,24 +145,24 @@ class ModelMatchDataset:
             for j, prompt in enumerate(conv['user_prompts'][:3]):
                 print(f"  {j+1}. {prompt[:100]}...")
     
-    def main():
-        # Créer le dataset
-        builder = ModelMatchDataset()
+def main():
+    # Créer le dataset
+    builder = ModelMatchDataset()
 
-        # Traiter le dataset no_robots
-        builder.process_no_robots_dataset()
+    # Traiter le dataset no_robots
+    builder.process_no_robots_dataset()
 
-        # Afficher les statistiques
-        stats = builder.get_statistics()
-        print("\n=== Statistiques du dataset ===")
-        for key, value in stats.items():
-            print(f"{key}: {value}")
+    # Afficher les statistiques
+    stats = builder.get_statistics()
+    print("\n=== Statistiques du dataset ===")
+    for key, value in stats.items():
+        print(f"{key}: {value}")
         
-        # Aperçu des conversations
-        builder.preview_conversations()
+    # Aperçu des conversations
+    builder.preview_conversations()
 
-        # Sauvegarder
-        builder.save_dataset()
+    # Sauvegarder
+    builder.save_dataset()
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()
