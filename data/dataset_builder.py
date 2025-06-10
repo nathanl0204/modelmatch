@@ -216,6 +216,109 @@ class ModelMatchDataset:
 
         return conversation_data
     
+    def process_oasst_dataset(self) -> None:
+        """
+        Traite le dataset OpenAssistant en reconstituant les conversations
+        à partir de la structure d'arbre et en gardant seulement celles en anglais.
+        """
+        print("Chargement du dataset OpenAssistant...")
+        dataset = load_dataset("OpenAssistant/oasst1")
+
+        # Créer un dictionnaire pour organiser les messages par conversation
+        conversations_data = {}
+
+        for item in dataset['train']:
+            if item['lang'] == 'en': # Garder seulement les conversations en anglais
+                conversation_id = item['message_tree_id']
+                if conversation_id not in conversations_data:
+                    conversations_data[conversation_id] = []
+                conversations_data[conversation_id].append(item)
+        
+        processed_count = 0
+        for conv_id, messages in conversations_data.items():
+            conversation = self._process_oasst_conversation(messages)
+            if conversation:
+                self.conversations.append(conversation)
+                processed_count += 1
+        
+        print(f"Nombre de conversations OpenAssistant extraites: {processed_count}")
+    
+    def _process_oasst_conversation(self, messages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Traite une conversation individuelle du dataset OpenAssistant en reconstituant
+        l'arbre de conversation et en extrayant les prompts utilisateur.
+        """
+        # Organiser les messages par ID pour faciliter la reconstruction de l'arbre
+        messages_by_id = {msg['message_id']: msg for msg in messages}
+
+        # Trouver le message racine (sans parent)
+        root_message = None
+        for msg in messages:
+            if msg['parent_id'] is None:
+                root_message = msg
+                break
+        
+        if not root_message or root_message['role'] != 'prompter':
+            return None
+        
+        # Reconstituer la conversation en suivant le chemin principal
+        user_prompts = []
+        current_message = root_message
+
+        while current_message:
+            if current_message['role'] == 'prompter':
+                user_prompts.append(current_message['text'])
+            
+            # Trouver le prochain message dans le fil de conversation
+            # On prend le premier enfant qui est une réponse d'assistant, puis son premier enfant prompter
+            next_message = None
+            for msg in messages:
+                if msg['parent_id'] == current_message['message_id']:
+                    if current_message['role'] == 'prompter' and msg['role'] == 'assistant':
+                        # Chercher le prochain message prompter après cette réponse
+                        for next_msg in messages:
+                            if next_msg['parent_id'] == msg['message_id'] and next_msg['role'] == 'prompter':
+                                next_message = next_msg
+                                break
+                        break
+            current_message = next_message
+        
+        # Ne garder que les conversations avec au moins 2 prompts utilisateur
+        if len(user_prompts) < 2:
+            return None
+
+        # Générer les métadonnées de la conversation
+        target_model = random.choice(self.models_pool)
+
+        # 30 % de chance qu'il y ait un changement de modèle
+        has_model_change = random.random() < 0.3
+        model_change_index = None
+
+        if has_model_change and len(user_prompts) > 2:
+            # Le changement se fait après au moins le 2ème prompt
+            model_change_index = random.randint(2, len(user_prompts) - 1)
+        elif has_model_change:
+            # Si on a exactement 2 prompts, pas de changement possible
+            has_model_change = False
+        
+        conversation_data = {
+            "id": str(uuid.uuid4()),
+            "source_dataset": "oasst",
+            "user_prompts": user_prompts,
+            "target_model_name": target_model['name'],
+            "target_model_version": target_model['version'],
+            "quantization_type": target_model['quantization'],
+            "has_model_change": has_model_change,
+            "model_change_index": model_change_index,
+            "theme": None, # À remplir plus tard avec classification automatique
+            "metadata": {
+                "original_tree_id": root_message['message_tree_id'],
+                "conversation_length": len(user_prompts)
+            }
+        }
+
+        return conversation_data
+    
     def save_dataset(self, filename: str = "modelmatch_dataset.json") -> None:
         """
         Sauvegarde le dataset au format JSON.
@@ -226,7 +329,7 @@ class ModelMatchDataset:
                 "version": "1.0",
                 "description": "Dataset pour tester le plugin ModelMatch",
                 "total_conversations": len(self.conversations),
-                "source_datasets": ["HuggingFaceH4/no_robots", "LDJnr/Puffin", "anon8231489123/ShareGPT_Vicuna_unfiltered"]
+                "source_datasets": ["HuggingFaceH4/no_robots", "LDJnr/Puffin", "anon8231489123/ShareGPT_Vicuna_unfiltered", "OpenAssistant/oasst1"]
             },
             "conversations": self.conversations
         }
@@ -288,6 +391,7 @@ def main():
     builder.process_no_robots_dataset()
     builder.process_puffin_dataset()
     builder.process_sharegpt_dataset()
+    builder.process_oasst_dataset()
 
     # Afficher les statistiques
     stats = builder.get_statistics()
