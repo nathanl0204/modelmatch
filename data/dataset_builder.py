@@ -84,6 +84,69 @@ class ModelMatchDataset:
 
         return conversation_data
     
+    def process_puffin_dataset(self) -> None:
+        """
+        Traite le dataset Puffin en gardant seulement les conversations
+        avec au moins 2 prompts utilisateur.
+        """
+        print("Chargement du dataset Puffin...")
+        dataset = load_dataset("LDJnr/Puffin")
+
+        for item in dataset['train']:
+            conversation = self._process_puffin_conversation(item)
+            if conversation:
+                self.conversations.append(conversation)
+        
+        print(f"Nombre de conversations Puffin extraites: {len([c for c in self.conversations if c['source_dataset'] == 'puffin'])}")
+
+    def _process_puffin_conversation(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Traite une conversation individuelle du dataset Puffin.
+        """
+        conversations = item['conversations']
+        user_prompts = []
+
+        for message in conversations:
+            # Ne garder que les messages utilisateur (from: human)
+            if message['from'] == 'human':
+                user_prompts.append(message['value'])
+        
+        # Ne garder que les conversations avec au moins 2 prompts utilisateur
+        if len(user_prompts) < 2:
+            return None
+
+        # Générer les métadonnées de la conversation
+        target_model = random.choice(self.models_pool)
+
+        # 30 % de chance qu'il y ait un changement de modèle
+        has_model_change = random.random() < 0.3
+        model_change_index = None
+
+        if has_model_change and len(user_prompts) > 2:
+            # Le changement se fait après au moins le 2ème prompt
+            model_change_index = random.randint(2, len(user_prompts) - 1)
+        elif has_model_change:
+            # Si on a exactement 2 prompts, pas de changement possible
+            has_model_change = False
+        
+        conversation_data = {
+            "id": str(uuid.uuid4()),
+            "source_dataset": "puffin",
+            "user_prompts": user_prompts,
+            "target_model_name": target_model["name"],
+            "target_model_version": target_model["version"],
+            "quantization_type": target_model["quantization"],
+            "has_model_change": has_model_change,
+            "model_change_index": model_change_index,
+            "theme": None, # À remplir plus tard avec classification automatique
+            "metadata": {
+                "original_source": item.get('source', 'unknown'),
+                "conversation_length": len(user_prompts)
+            }
+        }
+
+        return conversation_data
+    
     def save_dataset(self, filename: str = "modelmatch_dataset.json") -> None:
         """
         Sauvegarde le dataset au format JSON.
@@ -94,7 +157,7 @@ class ModelMatchDataset:
                 "version": "1.0",
                 "description": "Dataset pour tester le plugin ModelMatch",
                 "total_conversations": len(self.conversations),
-                "source_datasets": ["HuggingFaceH4/no_robots"]
+                "source_datasets": ["HuggingFaceH4/no_robots", "LDJnr/Puffin"]
             },
             "conversations": self.conversations
         }
@@ -154,6 +217,7 @@ def main():
 
     # Traiter le dataset no_robots
     builder.process_no_robots_dataset()
+    builder.process_puffin_dataset()
 
     # Afficher les statistiques
     stats = builder.get_statistics()
