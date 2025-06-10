@@ -147,6 +147,75 @@ class ModelMatchDataset:
 
         return conversation_data
     
+    def process_sharegpt_dataset(self) -> None:
+        """
+        traite le dataset ShareGPT en gardant seulement les conversations
+        avec au moins 2 prompts utilisateur et commençant par un prompt utilisateur.
+        """
+        print("Chargement du dataset ShareGPT...")
+        dataset = load_dataset("anon8231489123/ShareGPT_Vicuna_unfiltered", data_files="ShareGPT_V3_unfiltered_cleaned_split_no_imsorry.json")
+
+        processed_count = 0
+        for item in dataset['train']:
+            conversation = self._process_sharegpt_conversation(item)
+            if conversation:
+                self.conversations.append(conversation)
+                processed_count += 1
+        
+        print(f"Nombre de conversations ShareGPT extraites: {processed_count}")
+    
+    def _process_sharegpt_conversation(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Traite une conversation individuelle du dataset ShareGPT.
+        """
+        conversations = item.get('conversations', [])
+        user_prompts = []
+
+        # Vérifier que la conversation commence par un message utilisateur
+        if not conversations or conversations[0].get('from') != 'human':
+            return None
+        
+        for message in conversations:
+            # Ne garder que les messages utilisateur
+            if message.get('from') == 'human':
+                user_prompts.append(message.get('value', ''))
+        
+        # Ne garder que les conversations avec au moins 2 prompts utilisateur
+        if len(user_prompts) < 2:
+            return None
+        
+        # Générer les métadonnées de la conversation
+        target_model = random.choice(self.models_pool)
+
+        # 30 % de chance qu'il y ait un changement de modèle
+        has_model_change = random.random() < 0.3
+        model_change_index = None
+
+        if has_model_change and len(user_prompts) > 2:
+            # Le changement se fait après au moins le 2ème prompt
+            model_change_index = random.randint(2, len(user_prompts) - 1)
+        elif has_model_change:
+            # Si on a exactement 2 prompts, pas de changement possible
+            has_model_change = False
+        
+        conversation_data = {
+            "id": str(uuid.uuid4()),
+            "source_dataset": "sharegpt",
+            "user_prompts": user_prompts,
+            "target_model_name": target_model['name'],
+            "target_model_version": target_model['version'],
+            "quantization_type": target_model['quantization'],
+            "has_model_change": has_model_change,
+            "model_change_index": model_change_index,
+            "theme": None, # À remplir plus tard avec classification automatique
+            "metadata": {
+                "original_id": item.get('id', 'unknown'),
+                "conversation_length": len(user_prompts)
+            }
+        }
+
+        return conversation_data
+    
     def save_dataset(self, filename: str = "modelmatch_dataset.json") -> None:
         """
         Sauvegarde le dataset au format JSON.
@@ -157,7 +226,7 @@ class ModelMatchDataset:
                 "version": "1.0",
                 "description": "Dataset pour tester le plugin ModelMatch",
                 "total_conversations": len(self.conversations),
-                "source_datasets": ["HuggingFaceH4/no_robots", "LDJnr/Puffin"]
+                "source_datasets": ["HuggingFaceH4/no_robots", "LDJnr/Puffin", "anon8231489123/ShareGPT_Vicuna_unfiltered"]
             },
             "conversations": self.conversations
         }
@@ -218,6 +287,7 @@ def main():
     # Traiter le dataset no_robots
     builder.process_no_robots_dataset()
     builder.process_puffin_dataset()
+    builder.process_sharegpt_dataset()
 
     # Afficher les statistiques
     stats = builder.get_statistics()
