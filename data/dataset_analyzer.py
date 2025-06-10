@@ -41,8 +41,12 @@ class DatasetAnalyzer:
         # Analyse des changements de modèle
         changes = [c for c in self.conversations if c['has_model_change']]
         if changes:
-            change_indices = [c['model_change_index'] for c in changes]
-            print(f"\nIndex moyens des changements de modèle: {sum(change_indices)/len(change_indices):.1f}")
+            # Filtrer les indices None
+            change_indices = [c['model_change_index'] for c in changes if c['model_change_index'] is not None]
+            if change_indices:
+                print(f"\nIndex moyen des changements de modèle: {sum(change_indices)/len(change_indices):.1f}")
+            else:
+                print(f"\nAucun index de changement valide trouvé")
         
     def validate_dataset(self):
         """

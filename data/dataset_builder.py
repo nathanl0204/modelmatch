@@ -62,6 +62,9 @@ class ModelMatchDataset:
         if has_model_change and len(user_prompts) > 2:
             # Le changement se fait après au moins le 2ème prompt
             model_change_index = random.randint(2, len(user_prompts) - 1)
+        elif has_model_change:
+            # Si on a exactement 2 prompts, pas de changement possible
+            has_model_change = False
         
         conversation_data = {
             "id": str(uuid.uuid4()),
