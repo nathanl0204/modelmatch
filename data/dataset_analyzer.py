@@ -60,7 +60,7 @@ class DatasetAnalyzer:
         for i, conv in enumerate(self.conversations):
             # Vérifications obligatoires
             required_fields = ['id', 'user_prompts', 'target_model_name', 'target_model_version',
-                               'has_model_change', 'model_change_index']
+                               'has_model_change', 'model_change_index', 'theme', 'complexity', 'clarity']
             
             for field in required_fields:
                 if field not in conv:

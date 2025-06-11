@@ -76,6 +76,8 @@ class ModelMatchDataset:
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
+            "complexity": None, # Idem
+            "clarity": None, # Idem
             "metadata": {
                 "original_category": item['category'],
                 "conversation_length": len(user_prompts)
@@ -139,6 +141,8 @@ class ModelMatchDataset:
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
+            "complexity": None, # Idem
+            "clarity": None, # Idem
             "metadata": {
                 "original_source": item.get('source', 'unknown'),
                 "conversation_length": len(user_prompts)
@@ -208,6 +212,8 @@ class ModelMatchDataset:
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
+            "complexity": None, # Idem
+            "clarity": None, # Idem
             "metadata": {
                 "original_id": item.get('id', 'unknown'),
                 "conversation_length": len(user_prompts)
@@ -311,6 +317,8 @@ class ModelMatchDataset:
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
+            "complexity": None, # Idem
+            "clarity": None, # Idem
             "metadata": {
                 "original_tree_id": root_message['message_tree_id'],
                 "conversation_length": len(user_prompts)
