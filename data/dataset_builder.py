@@ -3,11 +3,13 @@ import random
 from typing import List, Dict, Any, Optional
 from datasets import load_dataset
 import uuid
+import os
+from together import Together
 
 class ModelMatchDataset:
     def __init__(self):
         self.conversations = []
-        self.models_pool = [
+        """ self.models_pool = [
             {"name": "gpt-3.5-turbo", "version": "0613", "quantization": None},
             {"name": "gpt-4", "version": "0314", "quantization": None},
             {"name": "claude-3-sonnet", "version": "20240229", "quantization": None},
@@ -18,7 +20,28 @@ class ModelMatchDataset:
             {"name": "llama-2-7b-chat", "version": "hf", "quantization": "4bit"},
             {"name": "llama-2-7b-chat", "version": "hf", "quantization": "8bit"},
             {"name": "mistral-7b-instruct", "version": "v0.1", "quantization": "4bit"},
-        ]
+        ] """
+
+        api_key = os.environ.get("TOGETHER_API_KEY")
+        if not api_key:
+            raise ValueError("TOGETHER_API_KEY environment variable not set. Please set it to fetch models.")
+        self.client = Together(api_key=api_key)
+
+        try:
+            print("Fetching models from Together API...")
+            all_together_models = self.client.models.list()
+            self.together_models_pool = [
+                model for model in all_together_models if model.type == 'chat'
+            ]
+            if not self.together_models_pool:
+                raise RuntimeError("No suitable 'chat' type models found from Together API. Dataset generation cannot proceed with API models.")
+            print(f"Successfully fetched {len(self.together_models_pool)} chat models from Together API.")
+            print("Example models from Together API:")
+            for i, model in enumerate(self.together_models_pool[:min(3, len(self.together_models_pool))]):
+                print(f"  - {model.id} (Type: {model.type})")
+        except Exception as e:
+            print(f"Error fetching or filtering models from Together API: {e}")
+            raise RuntimeError(f"Could not initialize models from Together API: {e}")
     
     def process_no_robots_dataset(self) -> None:
         """
@@ -52,8 +75,11 @@ class ModelMatchDataset:
         if len(user_prompts) < 2:
             return None
         
+        if not self.together_models_pool:
+            raise RuntimeError("Together models pool is not initialized or empty.")
+        
         # Générer les métadonnées de la conversation
-        target_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.together_models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
@@ -70,9 +96,9 @@ class ModelMatchDataset:
             "id": str(uuid.uuid4()),
             "source_dataset": "no_robots",
             "user_prompts": user_prompts,
-            "target_model_name": target_model["name"],
-            "target_model_version": target_model["version"],
-            "quantization_type": target_model["quantization"],
+            "target_model_name": target_api_model.id,
+            "target_model_version": "N/A", # La version est souvent donnée dans l'ID des modèles API (attribut modifiable plus tard)
+            "quantization_type": None, # Les modèles API ne sont généralement pas quantifiés (idem)
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
@@ -116,9 +142,12 @@ class ModelMatchDataset:
         # Ne garder que les conversations avec au moins 2 prompts utilisateur
         if len(user_prompts) < 2:
             return None
+        
+        if not self.together_models_pool:
+            raise RuntimeError("Together models pool is not initialized or empty.")
 
         # Générer les métadonnées de la conversation
-        target_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.together_models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
@@ -135,9 +164,9 @@ class ModelMatchDataset:
             "id": str(uuid.uuid4()),
             "source_dataset": "puffin",
             "user_prompts": user_prompts,
-            "target_model_name": target_model["name"],
-            "target_model_version": target_model["version"],
-            "quantization_type": target_model["quantization"],
+            "target_model_name": target_api_model.id,
+            "target_model_version": "N/A", # La version est souvent donnée dans l'ID des modèles API (attribut modifiable plus tard)
+            "quantization_type": None, # Les modèles API ne sont généralement pas quantifiés (idem)
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
@@ -188,8 +217,11 @@ class ModelMatchDataset:
         if len(user_prompts) < 2:
             return None
         
+        if not self.together_models_pool:
+            raise RuntimeError("Together models pool is not initialized or empty.")
+        
         # Générer les métadonnées de la conversation
-        target_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
@@ -206,9 +238,9 @@ class ModelMatchDataset:
             "id": str(uuid.uuid4()),
             "source_dataset": "sharegpt",
             "user_prompts": user_prompts,
-            "target_model_name": target_model['name'],
-            "target_model_version": target_model['version'],
-            "quantization_type": target_model['quantization'],
+            "target_model_name": target_api_model.id,
+            "target_model_version": "N/A", # La version est souvent donnée dans l'ID des modèles API (attribut modifiable plus tard)
+            "quantization_type": None, # Les modèles API ne sont généralement pas quantifiés (idem)
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
@@ -292,9 +324,12 @@ class ModelMatchDataset:
         # Ne garder que les conversations avec au moins 2 prompts utilisateur
         if len(user_prompts) < 2:
             return None
+        
+        if not self.together_models_pool:
+            raise RuntimeError("Together models pool is not initialized or empty.")
 
         # Générer les métadonnées de la conversation
-        target_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
@@ -311,9 +346,9 @@ class ModelMatchDataset:
             "id": str(uuid.uuid4()),
             "source_dataset": "oasst",
             "user_prompts": user_prompts,
-            "target_model_name": target_model['name'],
-            "target_model_version": target_model['version'],
-            "quantization_type": target_model['quantization'],
+            "target_model_name": target_api_model.id,
+            "target_model_version": "N/A", # La version est souvent donnée dans l'ID des modèles API (attribut modifiable plus tard)
+            "quantization_type": None, # Les modèles API ne sont généralement pas quantifiés (idem)
             "has_model_change": has_model_change,
             "model_change_index": model_change_index,
             "theme": None, # À remplir plus tard avec classification automatique
