@@ -221,7 +221,7 @@ class ModelMatchDataset:
             raise RuntimeError("Together models pool is not initialized or empty.")
         
         # Générer les métadonnées de la conversation
-        target_api_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.together_models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
@@ -329,7 +329,7 @@ class ModelMatchDataset:
             raise RuntimeError("Together models pool is not initialized or empty.")
 
         # Générer les métadonnées de la conversation
-        target_api_model = random.choice(self.models_pool)
+        target_api_model = random.choice(self.together_models_pool)
 
         # 30 % de chance qu'il y ait un changement de modèle
         has_model_change = random.random() < 0.3
