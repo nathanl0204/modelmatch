@@ -236,6 +236,33 @@ if __name__ == "__main__":
     
     plugin = ModelMatchPlugin(together_api_key=API_KEY)
 
+    available_chat_models = []
+    try:
+        print("Fetching available models from Together API...")
+        models_list_response = plugin.client.models.list()
+        available_chat_models = [
+            model.id for model in models_list_response
+            if hasattr(model, 'id') and model.id and \
+               hasattr(model, 'type') and model.type == 'chat' 
+        ]
+        if available_chat_models:
+            print(f"Found {len(available_chat_models)} chat models from Together API.")
+        else:
+            print("Warning: No chat models found via Together API or the list was empty.")
+    except Exception as e:
+        print(f"Warning: Could not fetch model list from Together API: {e}.")
+    
+    if not available_chat_models:
+        available_chat_models = [
+            "mistralai/Mixtral-8x7B-Instruct-v0.1",
+            "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO",
+            "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
+            "meta-llama/Llama-2-70b-chat-hf",
+            "codellama/CodeLlama-70b-Instruct-hf",
+            "Qwen/Qwen1.5-72B-Chat"
+        ]
+        print(f"Using hardcoded fallback model list ({len(available_chat_models)} models).")
+
     dataset_file_path = "../data/modelmatch_dataset.json"
 
     try:
@@ -251,64 +278,91 @@ if __name__ == "__main__":
     except json.JSONDecodeError:
         print(f"Error decoding JSON from {dataset_file_path}")
         exit()
-    
-    conversations_with_expected_change = [
-        conv for conv in all_conversations if conv.get("has_model_change") and conv.get("model_change_index") is not None
-    ]
 
-    if not conversations_with_expected_change:
-        print("Warning: No conversations found with 'has_model_change': true. Cannot test model change detection.")
-        if not all_conversations:
-            print("No conversations at all in the dataset.")
+    if not all_conversations:
+        print("No conversations available in the dataset to test.")
         exit()
-    else:
-        conversation_to_test = random.choice(conversations_with_expected_change)
+    
+    conversation_to_test = random.choice(all_conversations)
     
     test_prompts = conversation_to_test.get("user_prompts", [])
-    initial_model_for_plugin = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-    model_to_switch_to = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
+    initial_model_for_plugin = conversation_to_test.get("target_model_name")
 
-    if initial_model_for_plugin == model_to_switch_to:
-        print(f"Warning: Initial model and switch model are the same ({initial_model_for_plugin}). Pick a different 'model_to_switch_to'.")
-        if initial_model_for_plugin == "mistralai/Mixtral-8x7B-Instruct-v0.1":
-            model_to_switch_to = "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
-        else:
-            model_to_switch_to = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-        print(f"Adjusted 'model_to_switch_to' to: {model_to_switch_to}")
+    if not initial_model_for_plugin:
+        print(f"Warning: 'target_model_name' is missing for conversation ID {conversation_to_test.get('id', 'N/A')}. Using a default initial model.")
+        initial_model_for_plugin = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     
-
+    expects_change = conversation_to_test.get("has_model_change", False)
     simulated_change_prompt_index = conversation_to_test.get("model_change_index")
 
-    if not test_prompts:
-        print(f"Selected conversation (ID: {conversation_to_test.get('id', 'N/A')}) has no user prompts.")
-        exit()
-    
-    if simulated_change_prompt_index is None or not (0 <= simulated_change_prompt_index < len(test_prompts)):
-        print(f"Invalid 'model_change_index' ({simulated_change_prompt_index}) for conversation ID {conversation_to_test.get('id', 'N/A')}. Cannot simulate change.")
-        exit()
+    actual_model_change_index_for_plugin = None
+    actual_changed_model_name_for_plugin = None
 
-    print(f"Testing with initial model (plugin expectation): {initial_model_for_plugin}")
-    print(f"Conversation ID: {conversation_to_test.get('id', 'N/A')}")
-    print(f"Dataset 'target_model_name': {conversation_to_test.get('target_model_name', 'N/A')}")
+    print(f"\n--- Test setup ---")
+    print(f"Testing with conversation ID: {conversation_to_test.get('id', 'N/A')}")
+    print(f"Dataset 'target_model_name' (plugin's initial expected model): {initial_model_for_plugin}")
     print(f"Dataset 'has_model_change': {conversation_to_test.get('has_model_change')}")
     print(f"Dataset 'model_change_index': {simulated_change_prompt_index} (0-indexed)")
     print(f"Number of prompts: {len(test_prompts)}")
-    print(f"Simulating switch to model: {model_to_switch_to} at prompt index {simulated_change_prompt_index}")
 
+    if not test_prompts:
+        print(f"Selected conversation (ID: {conversation_to_test.get('id', 'N/A')}) has no user prompts. Skipping test.")
+        exit()
+    
+    if expects_change:
+        if simulated_change_prompt_index is not None and (0 <= simulated_change_prompt_index < len(test_prompts)):
+            actual_model_change_index_for_plugin = simulated_change_prompt_index
+            
+            potential_switch_models = [m for m in available_chat_models if m != initial_model_for_plugin]
 
-    change_detected, change_idx, reasons = plugin.verify_conversation_for_change(
+            if potential_switch_models:
+                actual_changed_model_name_for_plugin = random.choice(potential_switch_models)
+            else:
+                print(f"Warning: No suitable different model found in the dynamic pool to switch from '{initial_model_for_plugin}. Using a hardcoded alternative.")
+                if initial_model_for_plugin != "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO":
+                    actual_changed_model_name_for_plugin = "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
+                elif initial_model_for_plugin != "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free":
+                    actual_changed_model_name_for_plugin = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
+                elif initial_model_for_plugin != "mistralai/Mixtral-8x7B-Instruct-v0.1":
+                    actual_changed_model_name_for_plugin = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+                else:
+                    actual_changed_model_name_for_plugin = "meta-llama/Llama-2-70b-chat-hf"
+                
+                if actual_changed_model_name_for_plugin == initial_model_for_plugin:
+                    print(f"CRITICAL WARNING: Hardcoded fallback model '{actual_changed_model_name_for_plugin}' is THE SAME as initial model '{initial_model_for_plugin}'. Change simulation will not be effective.")
+                else:
+                    print(f"Using hardcoded alternative switch model: {actual_changed_model_name_for_plugin} at prompt index {actual_model_change_index_for_plugin}")
+            
+            print(f"SIMULATING model switch to: {actual_changed_model_name_for_plugin}")
+        else:
+            print(f"WARNING: Conversation expects change, but 'model_change_index' ({simulated_change_prompt_index}) is invalid or missing. Treating as NO CHANGE for simulation.")
+            expects_change = False
+    else:
+        print("NOT SIMULATING model switch (conversation does not expect one, or index is invalid).")
+    
+    print("--- Starting verification ---")
+    change_detected, detected_change_idx, reasons = plugin.verify_conversation_for_change(
         user_prompts=test_prompts,
         initial_model_name=initial_model_for_plugin,
         thresholds=None,
-        actual_model_change_index=simulated_change_prompt_index,
-        actual_changed_model_name=model_to_switch_to
+        actual_model_change_index=actual_model_change_index_for_plugin,
+        actual_changed_model_name=actual_changed_model_name_for_plugin
     )
+
+    print("\n--- Test result ---")
     if change_detected:
-        print(f"\nResult: Model change DETECTED after prompt index {change_idx} (0-indexed). Reasons: {reasons}")
-        if change_idx == simulated_change_prompt_index - 1:
-            print(f"SUCCESS: Detected change at the correct point (after prompt {simulated_change_prompt_index - 1}, before prompt {simulated_change_prompt_index}).")
+        print(f"\nPlugin result: Model change DETECTED after prompt index {detected_change_idx} (0-indexed). Reasons: {reasons}")
+        if expects_change:
+            expected_detection_idx = actual_model_change_index_for_plugin - 1 if actual_model_change_index_for_plugin is not None and actual_model_change_index_for_plugin > 0 else 0
+            if detected_change_idx == expected_detection_idx:
+                print(f"SUCCESS: Detected change at the correct point (after prompt {expected_detection_idx}, matching expected change before prompt {actual_model_change_index_for_plugin}).")
+            else:
+                print(f"PARTIAL SUCCESS/INFO: Change detected at index {detected_change_idx}, but simulated/expected change was after index {expected_detection_idx} (before prompt {actual_model_change_index_for_plugin}).")
         else:
-            print(f"INFO: Change detected at index {change_idx}, but simulated change was at index {simulated_change_prompt_index - 1}.")
+            print(f"FAILURE (False positive): Change detected, but no change was simulated/expected.")
     else:
-        print("\nResult: No model change detected by the plugin.")
-        print(f"FAILURE: A model change was simulated at prompt index {simulated_change_prompt_index} but not detected.")
+        print("Plugin result: No model change detected.")
+        if expects_change:
+            print(f"FAILURE (False negative): No change detected, but a change was simulated/expected to occur before prompt index {actual_model_change_index_for_plugin}.")
+        else:
+            print("SUCCESS: No change detected, and no change was simulated/expected.")
