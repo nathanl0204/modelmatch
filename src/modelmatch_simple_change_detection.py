@@ -158,7 +158,9 @@ class ModelMatchPlugin:
             user_prompts: list[str],
             initial_model_name: str,
             # Seuils pour la détection de changement. Ceux-ci devront être ajustés
-            thresholds: dict | None = None
+            thresholds: dict | None = None,
+            actual_model_change_index: int | None = None,
+            actual_changed_model_name: str | None = None
     ) -> tuple[bool, int, list[str]]:
         if thresholds is None:
             thresholds = {
@@ -178,21 +180,31 @@ class ModelMatchPlugin:
         history = []
         previous_response_features = None
 
-        print(f"Starting verification for model: {initial_model_name}")
+        print(f"Starting verification. Expecting model: {initial_model_name}")
+        if actual_model_change_index is not None and actual_changed_model_name is not None:
+            print(f"Simulating a switch to '{actual_changed_model_name}' after prompt index {actual_model_change_index - 1}.")
+
+        current_model_for_api_call = initial_model_name
 
         for i, prompt_text in enumerate(user_prompts):
             print(f"\n--- Turn {i+1}/{len(user_prompts)} ---")
             print(f"User: {prompt_text[:100]}...")
 
-            current_turn_messages = history + [{"role": "user", "content": prompt_text}]
+            if actual_model_change_index is not None and \
+               actual_changed_model_name is not None and \
+               i >= actual_model_change_index:
+                if current_model_for_api_call != actual_changed_model_name:
+                    print(f"--- SIMULATING SWITCH: Now using {actual_changed_model_name} for API call (prompt index {i}) ---")
+                current_model_for_api_call = actual_changed_model_name
 
-            response_text = self._get_model_response(initial_model_name, current_turn_messages)
+            current_turn_messages = history + [{"role": "user", "content": prompt_text}]
+            response_text = self._get_model_response(current_model_for_api_call, current_turn_messages)
 
             if response_text is None:
-                print(f"Model {initial_model_name}: No response or error for prompt {i+1}. Assuming critical failure/change.")
+                print(f"Model {current_model_for_api_call}: No response or error for prompt {i+1}. Assuming critical failure/change.")
                 return True, i - 1, ["api_error_or_no_response"]
             
-            print(f"Model: {response_text[:100]}...")
+            print(f"Model ({current_model_for_api_call}): {response_text[:100]}...")
             current_response_features = self._analyze_response_features(response_text)
 
             history.append({"role": "user", "content": prompt_text})
@@ -240,38 +252,63 @@ if __name__ == "__main__":
         print(f"Error decoding JSON from {dataset_file_path}")
         exit()
     
-    conversations_without_expected_change = [
-        conv for conv in all_conversations if not conv.get("has_model_change")
+    conversations_with_expected_change = [
+        conv for conv in all_conversations if conv.get("has_model_change") and conv.get("model_change_index") is not None
     ]
 
-    if not conversations_without_expected_change:
-        print("Warning: No conversations found with 'has_model_change': false. Picking a random conversation.")
+    if not conversations_with_expected_change:
+        print("Warning: No conversations found with 'has_model_change': true. Cannot test model change detection.")
         if not all_conversations:
             print("No conversations at all in the dataset.")
-            exit()
-        conversation_to_test = random.choice(all_conversations)
+        exit()
     else:
-        conversation_to_test = random.choice(conversations_without_expected_change)
+        conversation_to_test = random.choice(conversations_with_expected_change)
     
     test_prompts = conversation_to_test.get("user_prompts", [])
-    model_to_test_with = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    initial_model_for_plugin = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    model_to_switch_to = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
+
+    if initial_model_for_plugin == model_to_switch_to:
+        print(f"Warning: Initial model and switch model are the same ({initial_model_for_plugin}). Pick a different 'model_to_switch_to'.")
+        if initial_model_for_plugin == "mistralai/Mixtral-8x7B-Instruct-v0.1":
+            model_to_switch_to = "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
+        else:
+            model_to_switch_to = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+        print(f"Adjusted 'model_to_switch_to' to: {model_to_switch_to}")
+    
+
+    simulated_change_prompt_index = conversation_to_test.get("model_change_index")
 
     if not test_prompts:
         print(f"Selected conversation (ID: {conversation_to_test.get('id', 'N/A')}) has no user prompts.")
         exit()
+    
+    if simulated_change_prompt_index is None or not (0 <= simulated_change_prompt_index < len(test_prompts)):
+        print(f"Invalid 'model_change_index' ({simulated_change_prompt_index}) for conversation ID {conversation_to_test.get('id', 'N/A')}. Cannot simulate change.")
+        exit()
 
-    print(f"Testing with model: {model_to_test_with}")
+    print(f"Testing with initial model (plugin expectation): {initial_model_for_plugin}")
     print(f"Conversation ID: {conversation_to_test.get('id', 'N/A')}")
     print(f"Dataset 'target_model_name': {conversation_to_test.get('target_model_name', 'N/A')}")
     print(f"Dataset 'has_model_change': {conversation_to_test.get('has_model_change')}")
+    print(f"Dataset 'model_change_index': {simulated_change_prompt_index} (0-indexed)")
     print(f"Number of prompts: {len(test_prompts)}")
+    print(f"Simulating switch to model: {model_to_switch_to} at prompt index {simulated_change_prompt_index}")
 
 
     change_detected, change_idx, reasons = plugin.verify_conversation_for_change(
-        test_prompts,
-        model_to_test_with
+        user_prompts=test_prompts,
+        initial_model_name=initial_model_for_plugin,
+        thresholds=None,
+        actual_model_change_index=simulated_change_prompt_index,
+        actual_changed_model_name=model_to_switch_to
     )
     if change_detected:
-        print(f"Result: Model change DETECTED after prompt index {change_idx}. Reasons: {reasons}")
+        print(f"\nResult: Model change DETECTED after prompt index {change_idx} (0-indexed). Reasons: {reasons}")
+        if change_idx == simulated_change_prompt_index - 1:
+            print(f"SUCCESS: Detected change at the correct point (after prompt {simulated_change_prompt_index - 1}, before prompt {simulated_change_prompt_index}).")
+        else:
+            print(f"INFO: Change detected at index {change_idx}, but simulated change was at index {simulated_change_prompt_index - 1}.")
     else:
-        print("Result: No model change detected.")
+        print("\nResult: No model change detected by the plugin.")
+        print(f"FAILURE: A model change was simulated at prompt index {simulated_change_prompt_index} but not detected.")
