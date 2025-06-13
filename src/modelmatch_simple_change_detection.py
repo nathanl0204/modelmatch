@@ -37,10 +37,10 @@ class ModelMatchPlugin:
         self.adverb_tags = ['RB', 'RBR', 'RBS']
         self.common_emojis_pattern = re.compile(
             "["
-            "\U0001F600-\U0001F64F"  # Emoticons
-            "\U0001F300-\U0001F5FF"  # Symbols & pictographs
-            "\U0001F680-\U0001F6FF"  # Transport & map symbols
-            "\U0001F1E0-\U0001F1FF"  # Flags (iOS)
+            "\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\U0001F1E0-\U0001F1FF"
             "\U00002702-\U000027B0"
             "\U000024C2-\U0001F251"
             "]+",
@@ -138,7 +138,7 @@ class ModelMatchPlugin:
             deviations.append(f"adverb_score (abs_diff:{abs(curr_feats['adverb_score'] - prev_feats['adverb_score'])} > thr:{thresholds.get('adverb_diff', 3)})")
 
         if abs(curr_feats["markdown_score"] - prev_feats["markdown_score"]) > thresholds.get("markdown_diff", 1):
-            deviations.append(f"markdown_score (abs_diff:{abs(curr_feats['markdown_score'] - prev_feats['markdown_score'])} > thr:{thresholds.get('markdown_diff', 2)})")
+            deviations.append(f"markdown_score (abs_diff:{abs(curr_feats['markdown_score'] - prev_feats['markdown_score'])} > thr:{thresholds.get('markdown_diff', 1)})")
 
         if (prev_feats["emoji_count"] == 0 and curr_feats["emoji_count"] > 0) or \
            (prev_feats["emoji_count"] > 0 and curr_feats["emoji_count"] == 0) or \
@@ -162,17 +162,17 @@ class ModelMatchPlugin:
     ) -> tuple[bool, int, list[str]]:
         if thresholds is None:
             thresholds = {
-                "cosine_similarity_drop": 0.85, # La similarité doit être supérieure à 0.85
-                "length_ratio_min": 0.5,
-                "length_ratio_max": 2.0,
+                "cosine_similarity_drop": 0.80, # La similarité doit être supérieure à 0.85
+                "length_ratio_min": 0.4,
+                "length_ratio_max": 2.5,
                 "length_min_if_prev_empty": 10,
-                "politeness_diff": 2,
-                "adverb_diff": 3,
+                "politeness_diff": 3,
+                "adverb_diff": 4,
                 "markdown_diff": 2,
-                "emoji_diff": 0,
-                "punc_!_diff": 1,
-                "punc_?_diff": 1,
-                "min_deviations_for_change": 2 # Combien de métriques doivent dévier pour considérer qu'il y a un changement
+                "emoji_diff": 1,
+                "punc_!_diff": 2,
+                "punc_?_diff": 2,
+                "min_deviations_for_change": 3 # Combien de métriques doivent dévier pour considérer qu'il y a un changement
             }
         
         history = []
