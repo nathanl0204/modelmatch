@@ -2,3 +2,6 @@ data/*.txt
 test/.python-version
 test/env
 data/dataset_summary.txt
+src/__pycache__
+test/*.png
+test/*.json
