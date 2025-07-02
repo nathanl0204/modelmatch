@@ -6,4 +6,3 @@ src/__pycache__
 test/*.png
 test/*.json
 test/*.log
-src/*.log
