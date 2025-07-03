@@ -1,0 +1,16 @@
+                                            precision    recall  f1-score   support
+
+                    Qwen/Qwen2-7B-Instruct       0.39      0.35      0.37       505
+RedHatAI/Qwen2-7B-Instruct-quantized.w8a16       0.40      0.29      0.34       505
+          deepseek-ai/deepseek-llm-7b-chat       0.38      0.41      0.39       506
+               elinas/Llama-3-13B-Instruct       0.51      0.56      0.53       506
+                        google/gemma-7b-it       0.55      0.56      0.56       506
+                                    gpt-4o       0.46      0.51      0.48       505
+       meta-llama/Meta-Llama-3-8B-Instruct       0.43      0.46      0.45       506
+        microsoft/Phi-3-mini-128k-instruct       0.48      0.36      0.42       505
+        mistralai/Mistral-7B-Instruct-v0.1       0.37      0.41      0.39       505
+              unsloth/gemma-7b-it-bnb-4bit       0.50      0.55      0.52       506
+
+                                  accuracy                           0.45      5055
+                                 macro avg       0.45      0.45      0.44      5055
+                              weighted avg       0.45      0.45      0.44      5055
