@@ -1,8 +1,8 @@
-data/*.txt
-test/.python-version
-test/env
-data/dataset_summary.txt
-src/__pycache__
-test/*.png
-test/*.json
-test/*.log
+fingerprinting/data/*.txt
+fingerprinting/test/.python-version
+fingerprinting/test/env
+fingerprinting/data/dataset_summary.txt
+fingerprinting/src/__pycache__
+fingerprinting/test/*.png
+fingerprinting/test/*.json
+fingerprinting/test/*.log
