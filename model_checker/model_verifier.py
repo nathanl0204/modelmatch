@@ -133,33 +133,33 @@ class LocalModelVerifier:
             
             return report
         
-        def verify_model(self, local_path: str) -> Dict[str, Any]:
-            self.local_path = Path(local_path)
-            if not self.local_path.is_dir():
-                return {"status": "ERROR", "message": f"Le chemin spécifié n'est pas un répertoire valide : {local_path}"}
-            
-            if not self._load_local_config():
-                return {"status": "ERROR", "message": "Échec de la lecture de la configuration locale."}
-            
-            if not self._get_huggingface_info(self.model_id):
-                return {"status": "ERROR", "message": f"Impossible de récupérer les informations pour {self.model_id}."}
-            
-            config_report = self._verify_config_parameters()
-            integrity_report = self._verify_file_integrity()
+    def verify_model(self, local_path: str) -> Dict[str, Any]:
+        self.local_path = Path(local_path)
+        if not self.local_path.is_dir():
+            return {"status": "ERROR", "message": f"Le chemin spécifié n'est pas un répertoire valide : {local_path}"}
+        
+        if not self._load_local_config():
+            return {"status": "ERROR", "message": "Échec de la lecture de la configuration locale."}
+        
+        if not self._get_huggingface_info(self.model_id):
+            return {"status": "ERROR", "message": f"Impossible de récupérer les informations pour {self.model_id}."}
+        
+        config_report = self._verify_config_parameters()
+        integrity_report = self._verify_file_integrity()
 
-            final_status = "SUCCESS"
-            if config_report["status"] != "SUCCESS" or integrity_report["status"] != "SUCCESS":
-                final_status = "FAIL"
-            
-            return {
-                "overall_status": final_status,
-                "model_id": self.model_id,
-                "local_path": str(self.local_path),
-                "verification_reports": {
-                    "config_parameters": config_report,
-                    "file_integrity": integrity_report
-                }
+        final_status = "SUCCESS"
+        if config_report["status"] != "SUCCESS" or integrity_report["status"] != "SUCCESS":
+            final_status = "FAIL"
+        
+        return {
+            "overall_status": final_status,
+            "model_id": self.model_id,
+            "local_path": str(self.local_path),
+            "verification_reports": {
+                "config_parameters": config_report,
+                "file_integrity": integrity_report
             }
+        }
 
 if __name__ == "__main__":
     from transformers import AutoModelForCausalLM
