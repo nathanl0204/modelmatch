@@ -6,3 +6,5 @@ fingerprinting/src/__pycache__
 fingerprinting/test/*.png
 fingerprinting/test/*.json
 fingerprinting/test/*.log
+fingerprinting/src/fingerprint_generation.log
+.python-version
