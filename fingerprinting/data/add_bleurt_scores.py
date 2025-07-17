@@ -40,8 +40,13 @@ def main():
     
     print("Préparation des données de référence pour le calcul BLEURT...")
     responses_map = {}
-    for conv in tqdm(dataset["conversations"], desc="Indexation des réponses"):
+    prompts_map = {}
+    for conv in tqdm(dataset["conversations"], desc="Indexation des réponses et prompts"):
         conv_id = conv.get("id")
+        if conv_id:
+            for i, prompt in enumerate(conv.get("user_prompts", [])):
+                prompts_map[(conv_id, i)] = prompt.get("text", "")
+
         if "model_responses" in conv:
             for model_name, responses in conv["model_responses"].items():
                 for i, response_text in enumerate(responses):
@@ -49,34 +54,34 @@ def main():
                         responses_map[(conv_id, i)] = {}
                     responses_map[(conv_id, i)][model_name] = response_text
     
-    quantized_to_original_map = {
-        'unsloth/gemma-7b-it-bnb-4bit': 'google/gemma-7b-it',
-        'RedHatAI/Qwen2-7B-Instruct-quantized.w8a16': 'Qwen/Qwen2-7B-Instruct'
+    models_for_bleurt = {
+        'google/gemma-7b-it',
+        'unsloth/gemma-7b-it-bnb-4bit',
+        'Qwen/Qwen2-7B-Instruct',
+        'RedHatAI/Qwen2-7B-Instruct-quantized.w8a16'
     }
 
     print(f"Initialisation du scorer BLEURT avec le checkpoint '{BLEURT_CHECKPOINT}'...")
     scorer = bleurt_scorer.BleurtScorer(BLEURT_CHECKPOINT)
 
     bleurt_scores = []
-    print("Calcul des scores BLEURT pour les modèles quantifiés...")
+    print("Calcul des scores BLEURT pour les modèles concernés...")
     for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Calcul BLEURT"):
         model_name = row['model_name']
         conv_id = row['conversation_id']
         prompt_idx = row['prompt_index']
 
-        if model_name in quantized_to_original_map:
-            original_model = quantized_to_original_map[model_name]
+        if model_name in models_for_bleurt:
             lookup_key = (conv_id, prompt_idx)
 
-            if lookup_key in responses_map:
-                references = [responses_map[lookup_key].get(original_model, "")]
-                candidates = [responses_map[lookup_key].get(model_name, "")]
+            prompt_text = prompts_map.get(lookup_key)
+            response_text = responses_map.get(lookup_key, {}).get(model_name)
 
-                if references[0] and candidates[0]:
-                    score = scorer.score(references=references, candidates=candidates)[0]
-                    bleurt_scores.append(score)
-                else:
-                    bleurt_scores.append(0.0)
+            if prompt_text and response_text:
+                references = [prompt_text]
+                candidates = [response_text]
+                score = scorer.score(references=references, candidates=candidates)[0]
+                bleurt_scores.append(score)
             else:
                 bleurt_scores.append(0.0)
         else:
