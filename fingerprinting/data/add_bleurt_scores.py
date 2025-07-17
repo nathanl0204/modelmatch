@@ -7,7 +7,7 @@ import os
 FINGERPRINTS_CSV_PATH = "fingerprints_for_classification_extended.csv"
 OUTPUT_CSV_PATH = "fingerprints_with_bleurt.csv"
 DATASET_PATH = "modelmatch_dataset_reduced_no_change.json"
-BLEURT_CHECKPOINT = "BLEURT-20"
+BLEURT_CHECKPOINT = os.path.expanduser("~/BLEURT-20")
 
 def load_fingerprints(filepath: str) -> pd.DataFrame | None:
     try:
