@@ -8,3 +8,5 @@ fingerprinting/test/*.json
 fingerprinting/test/*.log
 fingerprinting/src/fingerprint_generation.log
 .python-version
+fingerprinting/models
+fingerprinting/src/training_results
