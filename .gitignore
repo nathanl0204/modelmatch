@@ -10,3 +10,4 @@ fingerprinting/src/fingerprint_generation.log
 .python-version
 fingerprinting/models
 fingerprinting/src/training_results
+plugin/__pycache__/
