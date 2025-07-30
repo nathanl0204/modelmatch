@@ -11,3 +11,5 @@ fingerprinting/src/fingerprint_generation.log
 fingerprinting/models
 fingerprinting/src/training_results
 plugin/__pycache__/
+env/
+requirements.txt
