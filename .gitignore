@@ -1,4 +1,3 @@
-fingerprinting/data/*.txt
 fingerprinting/test/.python-version
 fingerprinting/test/env
 fingerprinting/data/dataset_summary.txt
