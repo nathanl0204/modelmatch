@@ -12,7 +12,8 @@ class ModelMatchApp:
     """
     Classe principale pour l'application ModelMatch.
     Fournit une interface utilisateur pour interagir avec des modèles de langage
-    et vérifier leur identité en temps réel ou via l'analyse de texte.
+    et détecter en temps réel un changement de modèle par rapport au modèle
+    attendu, ou analyser un texte fourni, sans identifier le modèle de remplacement.
     """
     def __init__(self, root):
         """Initialise l'application, la fenêtre principale et les composants de base."""
@@ -21,7 +22,6 @@ class ModelMatchApp:
         self.root.geometry("800x600")
 
         self.conversation_history = []
-        self.last_detected_model = None
         self.pipeline = ClassifierPipeline()
 
         self.notebook = ttk.Notebook(root)
@@ -86,7 +86,7 @@ class ModelMatchApp:
         verify_frame = ttk.Frame(self.chat_tab, padding="10")
         verify_frame.pack(fill="x")
 
-        self.verify_button = ttk.Button(verify_frame, text="Vérifier le modèle", command=self.run_verification)
+        self.verify_button = ttk.Button(verify_frame, text="Détecter un changement", command=self.run_verification)
         self.verify_button.pack(side="left")
 
         self.visualize_button = ttk.Button(verify_frame, text="Visualiser les métriques", command=self.open_visualization_window)
@@ -95,7 +95,7 @@ class ModelMatchApp:
         self.reset_button = ttk.Button(verify_frame, text="Réinitialiser", command=self.reset_chat)
         self.reset_button.pack(side="left", padx=5)
 
-        self.result_label = ttk.Label(verify_frame, text="Résultat: En attente de vérification...", font=("Segoe UI", 10, "bold"))
+        self.result_label = ttk.Label(verify_frame, text="Résultat: En attente de détection...", font=("Segoe UI", 10, "bold"))
         self.result_label.pack(side="left", padx=10)
     
     def setup_analysis_tab(self):
@@ -234,24 +234,23 @@ class ModelMatchApp:
         self.root.after(0, self.send_button.config, {"state": "normal"})
     
     def run_verification(self):
-        """Lance la vérification du modèle pour la conversation en cours."""
+        """Lance la détection de changement pour la conversation en cours."""
         if not self.conversation_history:
-            messagebox.showinfo("Info", "Veuillez d'abord converser avec le modèle avant de lancer une vérification.")
+            messagebox.showinfo("Info", "Veuillez d'abord converser avec le modèle avant de lancer une détection.")
             return
         
         self.verify_button.config(state="disabled")
-        self.result_label.config(text="Résultat: Vérification en cours...")
+        self.result_label.config(text="Résultat: Détection en cours...")
         threading.Thread(target=self.verification_thread, args=(self.conversation_history, self.verify_button, self.result_label)).start()
     
     def reset_chat(self):
         """Réinitialise l'historique de la conversation et l'affichage."""
         if messagebox.askyesno("Réinitialiser la conversation", "Êtes-vous sûr de vouloir effacer la conversation actuelle ?"):
             self.conversation_history.clear()
-            self.last_detected_model = None
             self.chat_display.config(state="normal")
             self.chat_display.delete("1.0", tk.END)
             self.chat_display.config(state="disabled")
-            self.result_label.config(text="Résultat: En attente de vérification...")
+            self.result_label.config(text="Résultat: En attente de détection...")
     
     def run_text_analysis_verification(self):
         """Lance la vérification pour le texte collé dans l'onglet d'analyse."""
@@ -275,19 +274,19 @@ class ModelMatchApp:
         """
         Exécute la pipeline de classification dans un thread séparé
         pour ne pas bloquer l'interface utilisateur.
-        """
-        predicted_model, details = self.pipeline.verify(history)
-        current_model = (predicted_model, details)
-        change_message = ""
 
-        if button == self.verify_button:
-            if self.last_detected_model and self.last_detected_model[0] != current_model[0]:
-                prev_model, _ = self.last_detected_model
-                change_message = f"CHANGEMENT DÉTECTÉ !\nPrécédent: {prev_model}\n"
-            self.last_detected_model = current_model
-            
-        result_text = f"{change_message}Résultat: Modèle détecté = {predicted_model}"
-        
+        Le résultat est exprimé en détection d'anomalie : un écart entre le
+        modèle classé et le modèle attendu signale un changement, sans
+        révéler l'identité du modèle de remplacement.
+        """
+        expected_model = self.model_var.get()
+        predicted_model, _ = self.pipeline.verify(history)
+
+        if predicted_model == expected_model:
+            result_text = "Résultat: Aucun changement détecté (cohérent avec le modèle attendu)."
+        else:
+            result_text = "Résultat: CHANGEMENT DE MODÈLE DÉTECTÉ ! Le modèle en cours ne correspond plus à celui attendu."
+
         self.root.after(0, button.config, {"state": "normal"})
         self.root.after(0, label.config, {"text": result_text})
 
