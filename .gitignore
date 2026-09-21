@@ -13,3 +13,5 @@ plugin/__pycache__/
 env/
 requirements.txt
 docs/
+data/model_profiles/
+fingerprinting/data/model_profiles/
