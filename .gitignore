@@ -19,6 +19,7 @@ fingerprinting/data/interactive_classifier_probabilities_tsne.html
 model_list.txt
 tsne_confusion_zone_analysis.txt
 training_results/
+fingerprinting/test/
 feature_importance_report*.csv
 feature_importance_plot*.png
 variant_feature_importance.csv
