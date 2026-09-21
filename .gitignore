@@ -21,3 +21,5 @@ tsne_confusion_zone_analysis.txt
 training_results/
 feature_importance_report*.csv
 feature_importance_plot*.png
+importance_*.png
+metric_rank_change_comparison.png
