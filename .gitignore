@@ -16,3 +16,4 @@ docs/
 data/model_profiles/
 fingerprinting/data/model_profiles/
 fingerprinting/data/interactive_classifier_probabilities_tsne.html
+model_list.txt
