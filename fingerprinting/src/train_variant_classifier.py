@@ -1,3 +1,5 @@
+import argparse
+import numpy as np
 import pandas as pd
 import joblib
 import seaborn as sns
@@ -6,11 +8,9 @@ from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKF
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from xgboost import XGBClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
-import itertools
-from tqdm import tqdm
 import os
 
-def train_specific_variant_classifier(
+def train_intra_family_classifier(
         csv_path: str, 
         models_to_include: list,
         model_save_path: str,
@@ -20,12 +20,12 @@ def train_specific_variant_classifier(
         classifier_name: str
     ):
     """
-    Entraîne un classificateur XGBoost pour distinguer des variantes spécifiques d'un modèle.
+    Entraîne un classificateur XGBoost pour distinguer les modèles au sein d'une même famille.
     La fonction filtre le dataset pour n'inclure que les modèles spécifiés, optimise les
     hyperparamètres avec GridSearchCV, évalue le modèle, et sauvegarde le classificateur,
     le scaler, l'encodeur, un rapport de classification et une matrice de confusion.
     """
-    print(f"\n--- Entraînement du classificateur de variantes : {classifier_name} ---")
+    print(f"\n--- Entraînement du classificateur intra-famille : {classifier_name} ---")
     print(f"Chargement des données depuis {csv_path}...")
     try:
         df = pd.read_csv(csv_path)
@@ -43,7 +43,7 @@ def train_specific_variant_classifier(
         return
     
     print(f"Nombre d'échantillons conservés : {len(df_filtered)}")
-    print(f"Distribution des classes pour le classificateur '{classifier_name}':")
+    print(f"Distribution des classes pour '{classifier_name}':")
     print(df_filtered['model_name'].value_counts())
 
     features_to_drop = ['model_name', 'conversation_id', 'prompt_index']
@@ -74,31 +74,18 @@ def train_specific_variant_classifier(
     xgb_estimator = XGBClassifier(random_state=42, eval_metric='mlogloss')
 
     n_splits = 3
-    param_combinations = list(itertools.product(*param_grid.values()))
-    total_fits = len(param_combinations) * n_splits
 
     grid_search = GridSearchCV(
         estimator=xgb_estimator,
         param_grid=param_grid,
         cv=StratifiedKFold(n_splits),
         n_jobs=-1,
-        verbose=0,
+        verbose=2,
         scoring='accuracy'
     )
 
-    print(f"\nEntraînement avec GridSearchCV pour '{classifier_name}'...")
-    # Utilise tqdm pour afficher une barre de progression pour le GridSearchCV
-    with tqdm(total=total_fits, desc=f"GridSearch ({classifier_name})") as pbar:
-        def on_step(x):
-            pbar.update(1)
-        
-        original_fit = grid_search._run_search
-        def new_fit(self, *args, **kwargs):
-            original_fit(*args, **kwargs)
-            on_step(None)
-        
-        grid_search._run_search = lambda x: new_fit(grid_search, x)
-        grid_search.fit(X_train_scaled, y_train)
+    print(f"\nEntraînement avec GridSearchCV pour '{classifier_name}' (n_jobs=-1)...")
+    grid_search.fit(X_train_scaled, y_train)
 
     print("Entraînement terminé.")
 
@@ -109,36 +96,45 @@ def train_specific_variant_classifier(
     print("\nÉvaluation du modèle sur l'ensemble de test...")
     y_pred = classifier.predict(X_test_scaled)
     accuracy = accuracy_score(y_test, y_pred)
-    print(f"\nPrécision (Accuracy) du classificateur '{classifier_name}': {accuracy:.4f}")
+    print(f"\nPrécision (Accuracy) pour '{classifier_name}': {accuracy:.4f}")
 
     print("\nRapport de classification :")
     report = classification_report(y_test, y_pred, target_names=label_encoder.classes_, zero_division=0)
     print(report)
 
     with open(report_save_path, 'w', encoding='utf-8') as f:
-        f.write(f"Rapport pour le classificateur: {classifier_name}\n\n")
+        f.write(f"Classificateur intra-famille : {classifier_name}\n")
+        f.write(f"Précision (Accuracy) : {accuracy:.4f}\n")
+        f.write(f"Meilleurs hyperparamètres : {grid_search.best_params_}\n\n")
         f.write(report)
     print(f"Rapport de classification sauvegardé dans {report_save_path}")
 
-    print(f"\nGénération de la matrice de confusion pour les variantes ({classifier_name})...")
+    print(f"\nGénération de la matrice de confusion ({classifier_name})...")
     cm = confusion_matrix(y_test, y_pred)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    annot_labels = (np.asarray(["{0:d}\n({1:.1%})".format(value, cm_normalized[i, j])
+                                for i, row in enumerate(cm)
+                                for j, value in enumerate(row)])
+                    ).reshape(cm.shape)
+
     plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
-    plt.title(f'Matrice de confusion - {classifier_name}')
+    sns.heatmap(cm_normalized, annot=annot_labels, fmt='', cmap='Blues',
+                xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+    plt.title(f'Matrice de confusion — {classifier_name}')
     plt.ylabel('Vraie classe')
     plt.xlabel('Classe prédite')
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=0)
     plt.tight_layout()
-    plt.savefig(confusion_matrix_save_path)
+    plt.savefig(confusion_matrix_save_path, dpi=150)
+    plt.close()
     print(f"Matrice de confusion sauvegardée dans {confusion_matrix_save_path}")
-    plt.show()
 
     print("\nSauvegarde du modèle, du scaler et de l'encodeur...")
  
     model_dir = os.path.dirname(model_save_path)
     os.makedirs(model_dir, exist_ok=True)
-
+    
     joblib.dump(classifier, model_save_path)
     joblib.dump(scaler, model_save_path.replace(".joblib", "_scaler.joblib"))
     joblib.dump(label_encoder, encoder_save_path)
@@ -146,51 +142,80 @@ def train_specific_variant_classifier(
 
 def main():
     """
-    Fonction principale pour orchestrer l'entraînement de plusieurs classificateurs de variantes.
+    Fonction principale pour orchestrer l'entraînement des classificateurs intra-famille.
     Définit les groupes de modèles à comparer et appelle la fonction d'entraînement pour chacun.
     """
-    CSV_PATH = "../data/fingerprints_for_classification.csv"
+    parser = argparse.ArgumentParser(description="Entraîne les classificateurs intra-famille.")
+    parser.add_argument(
+        "--csv",
+        default="../data/fingerprints_for_classification_extended.csv",
+        help="Chemin du CSV d'empreintes à utiliser pour l'entraînement.",
+    )
+    args = parser.parse_args()
 
-    gemma_quantization_models = [
+    CSV_PATH = args.csv
+    os.makedirs("training_results", exist_ok=True)
+
+    # Classificateur intra-famille Gemma (3 modèles)
+    gemma_models = [
         'google/gemma-7b-it',
-        'unsloth/gemma-7b-it-bnb-4bit'
+        'unsloth/gemma-7b-it-bnb-4bit',
+        'gemma-4-31b-it',
     ]
-    train_specific_variant_classifier(
+    train_intra_family_classifier(
         csv_path=CSV_PATH,
-        models_to_include=gemma_quantization_models,
+        models_to_include=gemma_models,
         model_save_path="../models/gemma_quantization_classifier.joblib",
         encoder_save_path="../models/gemma_quantization_encoder.joblib",
-        report_save_path="training_results/gemma_quantization_report.txt",
-        confusion_matrix_save_path="training_results/gemma_quantization_confusion_matrix.png",
-        classifier_name="Gemma quantization (original vs 4-bit)"
+        report_save_path="training_results/gemma_intra_family_report.txt",
+        confusion_matrix_save_path="training_results/gemma_intra_family_confusion_matrix.png",
+        classifier_name="Gemma (7B vs 7B-4bit vs Gemma-4-31B)"
     )
     
-    qwen_quantization_models = [
+    # Classificateur intra-famille Qwen (3 modèles)
+    qwen_models = [
         'Qwen/Qwen2-7B-Instruct',
-        'RedHatAI/Qwen2-7B-Instruct-quantized.w8a16'
+        'RedHatAI/Qwen2-7B-Instruct-quantized.w8a16',
+        'qwen3.8-27b',
     ]
-    train_specific_variant_classifier(
+    train_intra_family_classifier(
         csv_path=CSV_PATH,
-        models_to_include=qwen_quantization_models,
+        models_to_include=qwen_models,
         model_save_path="../models/qwen2_quantization_classifier.joblib",
         encoder_save_path="../models/qwen2_quantization_encoder.joblib",
-        report_save_path="training_results/qwen2_quantization_report.txt",
-        confusion_matrix_save_path="training_results/qwen2_quantization_confusion_matrix.png",
-        classifier_name="Qwen2 quantization (original vs w8a16)"
+        report_save_path="training_results/qwen2_intra_family_report.txt",
+        confusion_matrix_save_path="training_results/qwen2_intra_family_confusion_matrix.png",
+        classifier_name="Qwen (2-7B vs 2-7B-w8a16 vs 3.8-27B)"
     )
 
-    parameter_models = [
+    # Classificateur intra-famille Llama-3 (2 modèles)
+    llama_models = [
         'meta-llama/Meta-Llama-3-8B-Instruct',
         'elinas/Llama-3-13B-Instruct'
     ]
-    train_specific_variant_classifier(
+    train_intra_family_classifier(
         csv_path=CSV_PATH,
-        models_to_include=parameter_models,
+        models_to_include=llama_models,
         model_save_path="../models/parameter_variant_classifier.joblib",
         encoder_save_path="../models/parameter_variant_encoder.joblib",
-        report_save_path="training_results/parameter_variant_report.txt",
-        confusion_matrix_save_path="training_results/parameter_variant_confusion_matrix.png",
-        classifier_name="Parameter variants"
+        report_save_path="training_results/llama3_intra_family_report.txt",
+        confusion_matrix_save_path="training_results/llama3_intra_family_confusion_matrix.png",
+        classifier_name="Llama-3 (8B vs 13B)"
+    )
+
+    # Classificateur intra-famille GPT (2 modèles)
+    gpt_models = [
+        'gpt-4o',
+        'openai/gpt-5.6-luna',
+    ]
+    train_intra_family_classifier(
+        csv_path=CSV_PATH,
+        models_to_include=gpt_models,
+        model_save_path="../models/gpt_variant_classifier.joblib",
+        encoder_save_path="../models/gpt_variant_encoder.joblib",
+        report_save_path="training_results/gpt_intra_family_report.txt",
+        confusion_matrix_save_path="training_results/gpt_intra_family_confusion_matrix.png",
+        classifier_name="GPT (4o vs 5.6-luna)"
     )
 
 if __name__ == "__main__":

@@ -1,10 +1,6 @@
 fingerprinting/test/.python-version
-fingerprinting/test/env
 fingerprinting/data/dataset_summary.txt
 fingerprinting/src/__pycache__
-fingerprinting/test/*.png
-fingerprinting/test/*.json
-fingerprinting/test/*.log
 fingerprinting/src/fingerprint_generation.log
 .python-version
 fingerprinting/models
@@ -12,13 +8,13 @@ fingerprinting/src/training_results
 plugin/__pycache__/
 env/
 requirements.txt
+fingerprinting/src/merge_fingerprints_for_training.py
 docs/
 data/model_profiles/
 fingerprinting/data/model_profiles/
 fingerprinting/data/interactive_classifier_probabilities_tsne.html
 model_list.txt
 tsne_confusion_zone_analysis.txt
-training_results/
 fingerprinting/test/
 feature_importance_report*.csv
 feature_importance_plot*.png

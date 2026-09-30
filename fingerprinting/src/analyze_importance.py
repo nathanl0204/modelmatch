@@ -8,7 +8,7 @@ def analyze_feature_importance(model_path: str, csv_path: str):
     Analyse l'importance des caractéristiques (métriques) d'un classificateur entraîné.
 
     Cette fonction charge un modèle de classification (ex: RandomForest) et un fichier CSV
-    contennat les données utilisées pour l'entraînement. Elle extrait les importances
+    contenant les données utilisées pour l'entraînement. Elle extrait les importances
     des caractéristiques du modèle, affiche les plus importantes, sauvegarde un rapport
     complet au format CSV, et génère un graphique à barres des 30 caractéristiques
     les plus importantes.

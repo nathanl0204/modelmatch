@@ -21,7 +21,7 @@ except ImportError:
         if 'mistral' in model_name_lower: return 'Mistral'
         if 'phi-3' in model_name_lower: return 'Phi-3'
         if 'deepseek' in model_name_lower: return 'Deepseek'
-        if 'gpt-4o' in model_name_lower: return 'GPT-4o'
+        if 'gpt-4o' in model_name_lower or 'gpt-5' in model_name_lower: return 'GPT'
         return 'Other'
 
 def visualize_classifier_probabilities(fingerprints_csv_path: str, model_path: str, scaler_path: str, output_path: str):
@@ -72,7 +72,7 @@ def visualize_classifier_probabilities(fingerprints_csv_path: str, model_path: s
         'Mistral': '#d62728',
         'Phi-3': '#9467bd',
         'Deepseek': '#8c564b',
-        'GPT-4o': '#e377c2',
+        'GPT': '#ff69b4',
         'Other': '#7f7f7f'
     }
 

@@ -13,9 +13,25 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 try:
     from fingerprinter import get_model_family
 except ImportError:
-    print("Avertissement: Impossible d'importer get_model_family. Utilisation d'une copie locale.")
     def get_model_family(model_name: str) -> str:
-        return model_name.split('/')[1].split('-')[0]
+        model_name = model_name.lower()
+        if 'llama-3' in model_name:
+            return 'Llama-3'
+        if 'gemma' in model_name:
+            return 'Gemma'
+        if 'qwen' in model_name:
+            return 'Qwen'
+        if 'phi-3' in model_name:
+            return 'Phi-3'
+        if 'mistral' in model_name:
+            return 'Mistral'
+        if 'deepseek' in model_name:
+            return 'Deepseek'
+        if 'nemotron' in model_name:
+            return 'Nemotron'
+        if 'gpt-4o' in model_name or 'gpt-5' in model_name:
+            return 'GPT'
+        return model_name.split('/')[0]
 
 def find_optimal_confidence_threshold():
     """

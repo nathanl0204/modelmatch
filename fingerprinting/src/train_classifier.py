@@ -47,7 +47,6 @@ def train_model_fingerprint_classifier(csv_path: str, model_save_path: str = "..
 
     print(f"\nSélection des {len(top_features)} caractéristiques les plus pertinentes...")
     X = X[top_features] """
-
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 

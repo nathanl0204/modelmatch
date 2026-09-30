@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -19,16 +20,18 @@ def get_model_family(model_name: str) -> str:
         return 'Llama-3'
     if 'gemma' in model_name:
         return 'Gemma'
-    if 'qwen2' in model_name:
-        return 'Qwen2'
+    if 'qwen' in model_name:
+        return 'Qwen'
     if 'phi-3' in model_name:
         return 'Phi-3'
     if 'mistral' in model_name:
         return 'Mistral'
     if 'deepseek' in model_name:
         return 'Deepseek'
-    if 'gpt-4o' in model_name:
-        return 'GPT-4o'
+    if 'nemotron' in model_name:
+        return 'Nemotron'
+    if 'gpt-4o' in model_name or 'gpt-5' in model_name:
+        return 'GPT'
     return model_name.split('/')[0]
 
 def train_family_classifier(csv_path: str, model_save_path: str = "../models/family_classifier.joblib", encoder_save_path: str = "../models/family_name_encoder.joblib"):
@@ -36,6 +39,8 @@ def train_family_classifier(csv_path: str, model_save_path: str = "../models/fam
     Entraîne un classificateur pour identifier la famille d'un modèle (ex: Llama, Gemma)
     à partir de ses empreintes stylistiques.
     """
+    os.makedirs("training_results", exist_ok=True)
+
     print(f"Chargement des données depuis {csv_path}...")
     try:
         df = pd.read_csv(csv_path)
@@ -51,6 +56,7 @@ def train_family_classifier(csv_path: str, model_save_path: str = "../models/fam
         return
     
     features_to_drop = ['model_name', 'conversation_id', 'prompt_index']
+    meta = df[features_to_drop]
     X = df.drop(columns=[col for col in features_to_drop if col in df.columns])
     y = df['model_name']
 
@@ -63,15 +69,15 @@ def train_family_classifier(csv_path: str, model_save_path: str = "../models/fam
     for i, class_name in enumerate(label_encoder.classes_):
         print(f"- {class_name} -> {i}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded, test_size=0.25, random_state=42, stratify=y_encoded
+    X_train, X_test, y_train, y_test, meta_train, meta_test = train_test_split(
+        X, y_encoded, meta, test_size=0.25, random_state=42, stratify=y_encoded
     )
 
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    print("\nOptimisation des hyperparamètres pour RandomForestClassifier avec GridSearchCV...")
+    print("\nOptimisation des hyperparamètres pour XGBClassifier avec GridSearchCV...")
 
     param_grid = {
         'n_estimators': [100, 200, 300],
@@ -92,33 +98,31 @@ def train_family_classifier(csv_path: str, model_save_path: str = "../models/fam
         param_grid=param_grid,
         cv=StratifiedKFold(n_splits),
         n_jobs=-1,
-        verbose=0,
+        verbose=2,
         scoring='accuracy'
     )
 
-    print("\nEntraînement avec GridSearchCV...")
-    # Utilise tqdm poour afficher une barre de progression pour le GridSearchCV
-    with tqdm(total=total_fits, desc="GridSearch progress") as pbar:
-        def on_step(x):
-            pbar.update(1)
-
-        original_fit = grid_search._run_search
-        def new_fit(self, *args, **kwargs):
-            original_fit(*args, **kwargs)
-            on_step(None)
-        
-        grid_search._run_search = lambda x: new_fit(grid_search, x)
-
-        grid_search.fit(X_train_scaled, y_train)
+    print("\nEntraînement avec GridSearchCV (242 combinaisons x 3 plis, n_jobs=-1)...")
+    grid_search.fit(X_train_scaled, y_train)
 
     print("Entraînement terminé.")
 
+    # Récupère le meilleur classificateur trouvé par la recherche
     print("\nMeilleurs hyperparamètres trouvés :")
     print(grid_search.best_params_)
     classifier = grid_search.best_estimator_
 
     print("\nÉvaluation du modèle sur l'ensemble de test...")
     y_pred = classifier.predict(X_test_scaled)
+
+    y_proba = classifier.predict_proba(X_test_scaled)
+    pred_frame = meta_test.reset_index(drop=True)
+    pred_frame['true_family'] = label_encoder.inverse_transform(y_test)
+    pred_frame['predicted_family'] = label_encoder.inverse_transform(y_pred)
+    for i, cls in enumerate(label_encoder.classes_):
+        pred_frame[f'prob_{cls}'] = y_proba[:, i]
+    pred_frame.to_csv("training_results/family_test_predictions.csv", index=False)
+    print("Prédictions du jeu de test sauvegardées dans training_results/family_test_predictions.csv")
 
     accuracy = accuracy_score(y_test, y_pred)
     print(f"\nPrécision (Accuracy): {accuracy:.4f}")
@@ -170,5 +174,21 @@ def train_family_classifier(csv_path: str, model_save_path: str = "../models/fam
     print(f"Encodeur de famille sauvegardé dans : {encoder_save_path}")
 
 if __name__ == '__main__':
-    CSV_DATA_PATH = "../data/fingerprints_for_classification.csv"
-    train_family_classifier(CSV_DATA_PATH)
+    parser = argparse.ArgumentParser(description="Entraîne le classificateur de famille de modèles.")
+    parser.add_argument(
+        "--csv",
+        default="../data/fingerprints_for_classification.csv",
+        help="Chemin du CSV d'empreintes à utiliser pour l'entraînement.",
+    )
+    parser.add_argument(
+        "--model-path",
+        default="../models/family_classifier.joblib",
+        help="Chemin de sauvegarde du classifieur de famille (.joblib).",
+    )
+    parser.add_argument(
+        "--encoder-path",
+        default="../models/family_name_encoder.joblib",
+        help="Chemin de sauvegarde de l'encodeur de noms de familles (.joblib).",
+    )
+    args = parser.parse_args()
+    train_family_classifier(args.csv, args.model_path, args.encoder_path)

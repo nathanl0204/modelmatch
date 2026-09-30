@@ -12,24 +12,10 @@ except ImportError:
     print("Erreur: Impossible d'importer depuis fingerprinter.py. Assurez-vous que le chemin est correct.")
     sys.exit(1)
 
+# Constantes pour les chemins et les seuils
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(SCRIPT_DIR, "../fingerprinting/models/")
-FAMILY_CONFIDENCE_THRESHOLD = 0.4564
-
-# Mapping pour faire correspondre le couple (famille, variante) à un nom de modèle exact
-MODEL_MAPPING = {
-    ("Gemma", "Original"): "google/gemma-7b-it",
-    ("Gemma", "Variante quantifiée"): "unsloth/gemma-7b-it-bnb-4bit",
-    ("Qwen2", "Original"): "Qwen/Qwen2-7B-Instruct",
-    ("Qwen2", "Variante quantifiée"): "RedHatAI/Qwen2-7B-Instruct-quantized.w8a16",
-    ("Llama-3", "Original"): "meta-llama/Meta-Llama-3-8B-Instruct",
-    ("Llama-3", "Variante de paramètres"): "elinas/Llama-3-13B-Instruct",
-    # Modèles sans classificateur de variante, la famille est le nom du modèle
-    ("Deepseek", "Original / Inconnu"): "deepseek-ai/deepseek-llm-7b-chat",
-    ("GPT-4o", "Original / Inconnu"): "gpt-4o",
-    ("Phi-3", "Original / Inconnu"): "microsoft/Phi-3-mini-128k-instruct",
-    ("Mistral", "Original / Inconnu"): "mistralai/Mistral-7B-Instruct-v0.1"
-}
+FAMILY_CONFIDENCE_THRESHOLD = 0.5060
 
 class ClassifierPipeline:
     """
@@ -65,14 +51,18 @@ class ClassifierPipeline:
             "family_scaler": self._load_asset(os.path.join(MODEL_DIR, "family_classifier_scaler.joblib")),
             "family_encoder": self._load_asset(os.path.join(MODEL_DIR, "family_name_encoder.joblib")),
 
+            # Charge les classificateurs binaires pour le départage
             "binary_deepseek_mistral": self._load_binary_assets("Deepseek", "Mistral"),
-            "binary_gpt-4o_qwen2": self._load_binary_assets("GPT-4o", "Qwen2"),
+            "binary_gpt-4o_qwen": self._load_binary_assets("GPT", "Qwen"),
             "binary_mistral_llama-3": self._load_binary_assets("Mistral", "Llama-3"),
-            "binary_phi-3_qwen2": self._load_binary_assets("Phi-3", "Qwen2"),
+            "binary_phi-3_qwen": self._load_binary_assets("Phi-3", "Qwen"),
+            "binary_nemotron_qwen": self._load_binary_assets("Nemotron", "Qwen"),
 
+            # Charge les classificateurs de variantes
             "gemma_quantization_classifier": self._load_variant_assets("gemma_quantization_classifier"),
             "qwen2_quantization_classifier": self._load_variant_assets("qwen2_quantization_classifier"),
             "parameter_variant_classifier": self._load_variant_assets("parameter_variant_classifier"),
+            "gpt_variant_classifier": self._load_variant_assets("gpt_variant_classifier"),
         }
         print("Chargement terminé.")
         return assets
@@ -136,10 +126,10 @@ class ClassifierPipeline:
     
     def verify(self, conversation_history):
         """
-        Exécute le pipeline de classification hiérarchique complet.
-        1. Classifie la famille du modèle.
-        2. Si la confiance est faible, utilise un classificateur binaire pour départager.
-        3. Si applicable, classifie le type de variante (quantification, taille).
+        Pipeline hiérarchique :
+        1. Classification par famille.
+        2. Départage binaire si confiance faible.
+        3. Classification intra-famille si classificateur disponible.
         """
         if len(conversation_history) < 1:
             return "Pas assez d'échanges pour une vérification.", "N/A"
@@ -156,7 +146,7 @@ class ClassifierPipeline:
         final_family = pd.Series(family_preds).mode()[0]
         avg_max_prob = np.mean([prob.max() for prob in family_probs])
 
-        # --- NIVEAU 2: Classification binaire de départage (si confiance faible) ---
+        # --- NIVEAU 2: Départage binaire (si confiance faible et classificateur disponible) ---
         if avg_max_prob < FAMILY_CONFIDENCE_THRESHOLD:
             avg_probs_per_class = np.mean(family_probs, axis=0)
             top_two_indices = np.argsort(avg_probs_per_class)[-2:]
@@ -170,28 +160,20 @@ class ClassifierPipeline:
                 binary_preds, _ = self._run_classification(fingerprints_df, **binary_assets)
                 final_family = pd.Series(binary_preds).mode()[0]
         
-        # --- NIVEAU 3: Détection de variante ---
-        variant_type = "Original / Inconnu"
+        # --- NIVEAU 3: Classification intra-famille ---
         variant_map = {
             "Gemma": "gemma_quantization_classifier",
-            "Qwen2": "qwen2_quantization_classifier",
-            "Llama-3": "parameter_variant_classifier"
+            "Qwen": "qwen2_quantization_classifier",
+            "Llama-3": "parameter_variant_classifier",
+            "GPT": "gpt_variant_classifier",
         }
 
         if final_family in variant_map:
-            classifier_name = variant_map[final_family]
-            variant_assets = self.assets.get(classifier_name)
+            variant_assets = self.assets.get(variant_map[final_family])
             if variant_assets and all(variant_assets.values()):
                 variant_preds, _ = self._run_classification(fingerprints_df, **variant_assets)
-                final_variant_name = pd.Series(variant_preds).mode()[0]
+                predicted_model = pd.Series(variant_preds).mode()[0]
+                return predicted_model, f"Famille: {final_family}, Modèle: {predicted_model}"
 
-                if "4bit" in final_variant_name or "w8a16" in final_variant_name:
-                    variant_type = "Variante quantifiée"
-                elif "8B" in final_variant_name or "13B" in final_variant_name:
-                    variant_type = "Variante de paramètres"
-                else:
-                    variant_type = "Original"
-        
-        predicted_model_name = MODEL_MAPPING.get((final_family, variant_type), f"{final_family} ({variant_type})")
-        
-        return predicted_model_name, f"Famille: {final_family}, Type: {variant_type}"
+        # Pas de classificateur intra-famille → le résultat est la famille (niveau 1 ou 2)
+        return final_family, f"Famille: {final_family}"

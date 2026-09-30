@@ -630,16 +630,18 @@ def get_model_family(model_name: str) -> str:
         return 'Llama-3'
     if 'gemma' in model_name:
         return 'Gemma'
-    if 'qwen2' in model_name:
-        return 'Qwen2'
+    if 'qwen' in model_name:
+        return 'Qwen'
     if 'phi-3' in model_name:
         return 'Phi-3'
     if 'mistral' in model_name:
         return 'Mistral'
     if 'deepseek' in model_name:
         return 'Deepseek'
-    if 'gpt-4o' in model_name:
-        return 'GPT-4o'
+    if 'nemotron' in model_name:
+        return 'Nemotron'
+    if 'gpt-4o' in model_name or 'gpt-5' in model_name:
+        return 'GPT'
     return model_name.split('/')[0]
 
 def get_text_metrics():
