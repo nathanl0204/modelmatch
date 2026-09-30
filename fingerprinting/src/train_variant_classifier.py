@@ -148,7 +148,7 @@ def main():
     parser = argparse.ArgumentParser(description="Entraîne les classificateurs intra-famille.")
     parser.add_argument(
         "--csv",
-        default="../data/fingerprints_for_classification_extended.csv",
+        default="../data/fingerprints_for_classification.csv",
         help="Chemin du CSV d'empreintes à utiliser pour l'entraînement.",
     )
     args = parser.parse_args()
